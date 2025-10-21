@@ -1,0 +1,18 @@
+{
+  "name": "ats-ets-logbook",
+  "version": "1.0.0",
+  "description": "DOT-style logbook for ATS/ETS2 using Telemetry Web Server (game time only)",
+  "main": "app.js",
+  "type": "module",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "node --watch app.js"
+  },
+  "dependencies": {
+    "ejs": "^3.1.9",
+    "express": "^4.19.2",
+    "fs-extra": "^11.2.0",
+    "morgan": "^1.10.0",
+    "undici": "^6.19.8"
+  }
+}

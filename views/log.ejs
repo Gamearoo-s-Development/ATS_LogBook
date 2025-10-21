@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- Basic meta -->
+  <meta charset="UTF-8"><!-- Use UTF-8 encoding -->
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Responsive -->
+  <title>DOT Logbook (Game Time)</title><!-- Page title -->
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="/public/styles.css"><!-- Our dark theme CSS -->
+</head>
+<body>
+  <!-- Top navigation / header -->
+  <header class="topbar">
+    <div class="brand">DOT Logbook — Game Time</div><!-- App name -->
+    <nav class="nav">
+      <a href="/settings">Settings</a><!-- Link to settings -->
+    </nav>
+  </header>
+
+  <!-- Main content container -->
+  <main class="container">
+    <!-- Driver / Telemetry header row -->
+    <section class="row">
+      <div class="card">
+        <div class="card-title">Driver</div>
+        <div class="card-value"><%= settings.driver_name %></div><!-- Driver name from settings -->
+      </div>
+
+      <div class="card">
+        <div class="card-title">Telemetry</div>
+        <!-- Show connectivity info -->
+        <% if (telem && telem.game) { %>
+          <div class="card-kv"><span>Connected:</span><span><%= String(telem.game.connected) %></span></div>
+          <div class="card-kv"><span>Game:</span><span><%= telem.game.gameName || "N/A" %></span></div>
+          <div class="card-kv"><span>Paused:</span><span><%= String(telem.game.paused) %></span></div>
+          <div class="card-kv"><span>Time Scale:</span><span><%= telem.game.timeScale ?? "?" %></span></div>
+        <% } else { %>
+          <div class="card-value warn">No telemetry data yet.</div>
+        <% } %>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Game Time</div>
+        <!-- If telemetry exists, display its absolute game time split as {date,time} -->
+        <% if (telem && telem.game && telem.game.time) { 
+             const gt = telem.game.time;
+             const date = gt.slice(0,10);
+             const time = gt.slice(11,16);
+        %>
+          <div id="game-time">
+            <div class="card-kv"><span>Date:</span><span><%= date %></span></div>
+            <div class="card-kv"><span>Time:</span><span><%= time %></span></div>
+          </div>
+        <% } else { %>
+          <div class="card-value warn">Waiting for game.time…</div>
+        <% } %>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Truck</div>
+        <!-- Show speed/odometer in mph/miles -->
+        <% 
+          const kmh = telem && telem.truck && typeof telem.truck.speed === "number" ? telem.truck.speed : null;
+          const mph = kmh === null ? null : (kmh * 0.621371);
+          const odoKm = telem && telem.truck && typeof telem.truck.odometer === "number" ? telem.truck.odometer : null;
+          const odoMi = odoKm === null ? null : (odoKm * 0.621371);
+        %>
+        <div class="card-kv"><span>Speed:</span><span><%= mph === null ? "N/A" : mph.toFixed(0) + " mph" %></span></div>
+        <div class="card-kv"><span>Odometer:</span><span><%= odoMi === null ? "N/A" : odoMi.toFixed(0) + " mi" %></span></div>
+        <% if (telem && telem.navigation) { %>
+          <div class="card-kv"><span>Speed Limit:</span><span><%= telem.navigation.speedLimit ?? "?" %> km/h</span></div>
+        <% } %>
+      </div>
+    </section>
+
+    <!-- Day picker / info -->
+    <section class="row">
+      <div class="card wide">
+        <div class="card-title">Day</div>
+        <% if (gameDate) { %>
+          <div class="card-kv"><span>Viewing Game Date:</span><span><%= gameDate %></span></div>
+        <% } else { %>
+          <div class="card-value warn">No game date. Start the game with telemetry to pick a day.</div>
+        <% } %>
+        <div class="day-nav">
+          <% if (gameDate) { 
+               // Rough prev/next by adding/subtracting 1 day via JS Date (still UTC)
+               const d0 = new Date(gameDate + "T00:00:00Z");
+               const dPrev = new Date(d0.getTime() - 24*60*60*1000).toISOString().slice(0,10);
+               const dNext = new Date(d0.getTime() + 24*60*60*1000).toISOString().slice(0,10);
+          %>
+            <a class="btn" href="/log/<%= dPrev %>">◀ Prev Day</a>
+            <a class="btn" href="/">Today (Game)</a>
+            <a class="btn" href="/log/<%= dNext %>">Next Day ▶</a>
+          <% } %>
+        </div>
+      </div>
+    </section>
+
+    <!-- Duty status quick log -->
+    <section class="row">
+      <div class="card wide">
+        <div class="card-title">Quick Log (stamps current <em>game time</em>)</div>
+        <div class="status-buttons">
+          <!-- Buttons post /api/event with chosen status -->
+          <button class="status off" data-status="OFF">Off Duty</button>
+          <button class="status sb"  data-status="SB">Sleeper</button>
+          <button class="status d"   data-status="D">Driving</button>
+          <button class="status on"  data-status="ON">On Duty</button>
+          <button class="status ym"  data-status="YM">Yard Move</button>
+          <button class="status pc"  data-status="PC">Personal Conveyance</button>
+        </div>
+        <div class="note-row">
+          <input id="note" type="text" placeholder="Optional note (shipper, fuel, inspection, etc.)">
+        </div>
+        <div id="post-result" class="muted"></div>
+      </div>
+    </section>
+
+    <!-- HOS-like 24h graph -->
+    <section class="row">
+      <div class="card wide">
+        <div class="card-title">Daily Grid (Game Date)</div>
+        <% if (gameDate) { %>
+          <div class="grid">
+            <!-- Y-axis labels (OFF, SB, D, ON). YM/PC are flags but we render them on ON row for simplicity -->
+            <div class="grid-y">
+              <div>OFF</div>
+              <div>SB</div>
+              <div>D</div>
+              <div>ON</div>
+            </div>
+            <!-- 24 hour vertical ticks -->
+            <div class="grid-x">
+              <% for (let h=0; h<25; h++) { %>
+                <div class="tick"><%= h %></div>
+              <% } %>
+            </div>
+            <!-- Segments bar layer -->
+            <div class="grid-bars">
+              <% 
+                // Map status -> Y row (OFF=0, SB=1, D=2, ON=3). YM/PC piggyback onto ON row visually.
+                const rowOf = s => (s === "OFF" ? 0 : s === "SB" ? 1 : s === "D" ? 2 : 3);
+                // Convert a time ISO to minutes since midnight of gameDate
+                const D0 = new Date(gameDate + "T00:00:00Z").getTime();
+                function minSinceMid(iso) {
+                  const t = new Date(iso).getTime();
+                  const diff = Math.max(0, Math.min(24*60, Math.floor((t - D0)/60000)));
+                  return diff;
+                }
+              %>
+              <% segments.forEach(seg => { 
+                   const m0 = minSinceMid(seg.startIso);
+                   const m1 = minSinceMid(seg.endIso);
+                   const mins = Math.max(0, m1 - m0);
+                   const leftPct = (m0 / (24*60)) * 100;
+                   const widthPct = (mins / (24*60)) * 100;
+                   const row = rowOf(seg.status);
+              %>
+                <div class="bar row-<%= row %> <%= seg.status.toLowerCase() %>" 
+                     style="left:<%= leftPct %>%; width:<%= widthPct %>%;">
+                  <span class="bar-label"><%= seg.status %></span>
+                </div>
+              <% }); %>
+            </div>
+          </div>
+        <% } else { %>
+          <div class="muted">Start your game / telemetry to view a day.</div>
+        <% } %>
+      </div>
+    </section>
+
+    <!-- Event list (for the shown game date) -->
+    <section class="row">
+      <div class="card wide">
+        <div class="card-title">Events on <%= gameDate || "?" %></div>
+        <% if (events.length === 0) { %>
+          <div class="muted">No events for this date yet.</div>
+        <% } else { %>
+          <table class="events">
+            <thead>
+              <tr>
+                <th>Time</th><th>Status</th><th>Odometer</th><th>Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% events.forEach(ev => { 
+                   const t = ev.gameTimeIso.slice(11,16);
+                   const odo = (typeof ev.odometerMi === "number") ? `${ev.odometerMi.toFixed(0)} mi` : "—";
+              %>
+                <tr>
+                  <td><%= t %></td>
+                  <td><%= ev.status %></td>
+                  <td><%= odo %></td>
+                  <td><%= ev.note || "" %></td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        <% } %>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div>Game Time only. Telemetry-driven. No IRL time or clocks are used.</div>
+  </footer>
+
+  <!-- Front-end JS -->
+  <script src="/public/main.js"></script><!-- Handles button posts + telemetry polling -->
+</body>
+</html>

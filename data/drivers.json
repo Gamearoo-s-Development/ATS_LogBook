@@ -1,0 +1,9 @@
+{
+  "activeDriverId": "default",
+  "drivers": [
+    {
+      "id": "default",
+      "name": "Driver Name"
+    }
+  ]
+}
