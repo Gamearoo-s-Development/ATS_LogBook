@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <!-- Meta + Title -->
+  <!-- Basic meta + title -->
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>DOT Logbook (Game Time)</title>
@@ -20,7 +20,7 @@
 
   <!-- Main -->
   <main class="container">
-    <!-- Header cards -->
+    <!-- Summary cards -->
     <section class="row">
       <div class="card">
         <div class="card-title">Driver</div>
@@ -41,14 +41,24 @@
 
       <div class="card">
         <div class="card-title">Game Time</div>
+        <% 
+          // Helper: ISO ("0001-01-08T21:09:00Z") → "h:mm AM/PM"
+          function fmt12(iso) {
+            if (!iso || iso.length < 16) return "—";
+            const hh = Number(iso.slice(11,13));
+            const mm = iso.slice(14,16);
+            const ampm = hh >= 12 ? "PM" : "AM";
+            const h12 = ((hh % 12) || 12);
+            return `${h12}:${mm} ${ampm}`;
+          }
+        %>
         <% if (telem && telem.game && telem.game.time) { 
              const gt = telem.game.time;
              const date = gt.slice(0,10);
-             const time = gt.slice(11,16);
         %>
           <div id="game-time">
             <div class="card-kv"><span>Date:</span><span><%= date %></span></div>
-            <div class="card-kv"><span>Time:</span><span><%= time %></span></div>
+            <div class="card-kv"><span>Time:</span><span><%= fmt12(gt) %></span></div>
           </div>
         <% } else { %>
           <div class="card-value warn">Waiting for game.time…</div>
@@ -99,7 +109,7 @@
       <div class="card wide">
         <div class="card-title">Quick Log (stamps current <em>game time</em>)</div>
         <div class="status-buttons">
-          <!-- Highlight the current day's status (if known) with .active -->
+          <!-- Active highlight indicates the last segment status for this day's view -->
           <button class="status off <%= currentStatus==='OFF' ? 'active' : '' %>" data-status="OFF">Off Duty</button>
           <button class="status sb  <%= currentStatus==='SB'  ? 'active' : '' %>" data-status="SB">Sleeper</button>
           <button class="status d   <%= currentStatus==='D'   ? 'active' : '' %>" data-status="D">Driving</button>
@@ -121,18 +131,27 @@
 
         <% if (gameDate) { %>
           <% 
-            // Helpers inside template for minute → "H:MM"
-            const fmt = (m) => {
+            // Format minutes → "H:MM"
+            const fmtDur = (m) => {
               const h = Math.floor(m/60);
               const mm = String(m % 60).padStart(2,'0');
               return `${h}:${mm}`;
             };
 
-            // Row totals (OFF, SB, D, ON). YM/PC rolled into ON, but also available as durations.YM/PC
+            // Row totals (OFF, SB, D, ON). OFF now includes PC; ON includes YM.
             const dOFF = durations.OFF || 0;
             const dSB  = durations.SB  || 0;
             const dD   = durations.D   || 0;
             const dON  = durations.ON  || 0;
+
+            // Hour tick label helper: 0..24 → "12 AM" .. "12 AM"
+            function hourLabel12(h) {
+              const am = h < 12 || h === 24;                  // 0..11, 24 → AM
+              const raw = h % 12;                             // 0..11
+              const h12 = raw === 0 ? 12 : raw;               // 0 → 12
+              const suffix = am ? "AM" : "PM";
+              return `${h12} ${suffix}`;
+            }
           %>
 
           <div class="grid" 
@@ -145,34 +164,33 @@
               <div>ON</div>
             </div>
 
-            <!-- X-axis hour labels -->
+            <!-- X-axis hour labels in AM/PM -->
             <div class="grid-x">
               <% for (let h=0; h<25; h++) { %>
-                <div class="tick"><%= h %></div>
+                <div class="tick"><%= hourLabel12(h) %></div>
               <% } %>
             </div>
 
-            <!-- Grid lines (vertical hour lines + horizontal row lines) -->
+            <!-- Grid lines (vertical hour marks + horizontal row lines) -->
             <div class="grid-lines">
-              <!-- 25 vertical lines at each hour mark (0..24) -->
               <% for (let h=0; h<25; h++) { 
                    const leftPct = (h/24)*100;
               %>
                 <div class="vline" style="left:<%= leftPct %>%"></div>
               <% } %>
-              <!-- 4 horizontal lines for OFF/SB/D/ON rows -->
               <div class="hline" style="top:var(--y-off)"></div>
               <div class="hline" style="top:var(--y-sb)"></div>
               <div class="hline" style="top:var(--y-d)"></div>
               <div class="hline" style="top:var(--y-on)"></div>
             </div>
 
-            <!-- Bars layer -->
+            <!-- Bars layer (segments already trimmed at "now" if today) -->
             <div class="grid-bars">
               <% 
-                // Map status -> Y row (OFF=0, SB=1, D=2, ON=3). YM/PC render on ON row.
-                const rowOf = s => (s === "OFF" ? 0 : s === "SB" ? 1 : s === "D" ? 2 : 3);
-                // Convert ISO → minutes since midnight
+                // Map status → row: OFF=0, SB=1, D=2, ON=3
+                // YM stays on ON row; PC must render on OFF row.
+                const rowOf = s => (s === "OFF" ? 0 : s === "SB" ? 1 : s === "D" ? 2 : (s === "PC" ? 0 : 3));
+                // Convert ISO → minutes since midnight for positioning
                 const D0 = new Date(gameDate + "T00:00:00Z").getTime();
                 function minSinceMid(iso) {
                   const t = new Date(iso).getTime();
@@ -197,17 +215,18 @@
 
             <!-- Right-side durations aligned to rows -->
             <div class="grid-durations">
-              <div class="dur off" style="top:var(--y-off)"><%= fmt(dOFF) %></div>
-              <div class="dur sb"  style="top:var(--y-sb)"><%= fmt(dSB) %></div>
-              <div class="dur d"   style="top:var(--y-d)"><%= fmt(dD) %></div>
+              <div class="dur off" style="top:var(--y-off)">
+                <%= fmtDur(dOFF) %>
+                <% if ((durations.PC||0) > 0) { %>
+                  <span class="dur-sub">PC <%= fmtDur(durations.PC) %></span>
+                <% } %>
+              </div>
+              <div class="dur sb"  style="top:var(--y-sb)"><%= fmtDur(dSB) %></div>
+              <div class="dur d"   style="top:var(--y-d)"><%= fmtDur(dD) %></div>
               <div class="dur on"  style="top:var(--y-on)">
-                <%= fmt(dON) %>
-                <% if ((durations.YM||0) > 0 || (durations.PC||0) > 0) { %>
-                  <!-- Optional YM/PC detail in smaller text -->
-                  <span class="dur-sub">
-                    <% if ((durations.YM||0) > 0) { %> YM <%= fmt(durations.YM) %> <% } %>
-                    <% if ((durations.PC||0) > 0) { %> PC <%= fmt(durations.PC) %> <% } %>
-                  </span>
+                <%= fmtDur(dON) %>
+                <% if ((durations.YM||0) > 0) { %>
+                  <span class="dur-sub">YM <%= fmtDur(durations.YM) %></span>
                 <% } %>
               </div>
             </div>
@@ -218,7 +237,7 @@
       </div>
     </section>
 
-    <!-- Event list -->
+    <!-- Event list (kept 24h time for precision; can switch to AM/PM on request) -->
     <section class="row">
       <div class="card wide">
         <div class="card-title">Events on <%= gameDate || "?" %></div>
@@ -233,7 +252,7 @@
             </thead>
             <tbody>
               <% events.forEach(ev => { 
-                   const t = ev.gameTimeIso.slice(11,16);
+                   const t = ev.gameTimeIso.slice(11,16); // 24h display; say the word if you want AM/PM here too
                    const odo = (typeof ev.odometerMi === "number") ? `${ev.odometerMi.toFixed(0)} mi` : "—";
               %>
                 <tr>
