@@ -1,35 +1,34 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <!-- Basic meta -->
-  <meta charset="UTF-8"><!-- Use UTF-8 encoding -->
-  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Responsive -->
-  <title>DOT Logbook (Game Time)</title><!-- Page title -->
+  <!-- Meta + Title -->
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DOT Logbook (Game Time)</title>
 
-  <!-- Stylesheet -->
-  <link rel="stylesheet" href="/public/styles.css"><!-- Our dark theme CSS -->
+  <!-- Styles -->
+  <link rel="stylesheet" href="/public/styles.css">
 </head>
 <body>
-  <!-- Top navigation / header -->
+  <!-- Header -->
   <header class="topbar">
-    <div class="brand">DOT Logbook — Game Time</div><!-- App name -->
+    <div class="brand">DOT Logbook — Game Time</div>
     <nav class="nav">
-      <a href="/settings">Settings</a><!-- Link to settings -->
+      <a href="/settings">Settings</a>
     </nav>
   </header>
 
-  <!-- Main content container -->
+  <!-- Main -->
   <main class="container">
-    <!-- Driver / Telemetry header row -->
+    <!-- Header cards -->
     <section class="row">
       <div class="card">
         <div class="card-title">Driver</div>
-        <div class="card-value"><%= settings.driver_name %></div><!-- Driver name from settings -->
+        <div class="card-value"><%= settings.driver_name %></div>
       </div>
 
       <div class="card">
         <div class="card-title">Telemetry</div>
-        <!-- Show connectivity info -->
         <% if (telem && telem.game) { %>
           <div class="card-kv"><span>Connected:</span><span><%= String(telem.game.connected) %></span></div>
           <div class="card-kv"><span>Game:</span><span><%= telem.game.gameName || "N/A" %></span></div>
@@ -42,7 +41,6 @@
 
       <div class="card">
         <div class="card-title">Game Time</div>
-        <!-- If telemetry exists, display its absolute game time split as {date,time} -->
         <% if (telem && telem.game && telem.game.time) { 
              const gt = telem.game.time;
              const date = gt.slice(0,10);
@@ -59,7 +57,6 @@
 
       <div class="card">
         <div class="card-title">Truck</div>
-        <!-- Show speed/odometer in mph/miles -->
         <% 
           const kmh = telem && telem.truck && typeof telem.truck.speed === "number" ? telem.truck.speed : null;
           const mph = kmh === null ? null : (kmh * 0.621371);
@@ -74,7 +71,7 @@
       </div>
     </section>
 
-    <!-- Day picker / info -->
+    <!-- Day navigation -->
     <section class="row">
       <div class="card wide">
         <div class="card-title">Day</div>
@@ -85,7 +82,6 @@
         <% } %>
         <div class="day-nav">
           <% if (gameDate) { 
-               // Rough prev/next by adding/subtracting 1 day via JS Date (still UTC)
                const d0 = new Date(gameDate + "T00:00:00Z");
                const dPrev = new Date(d0.getTime() - 24*60*60*1000).toISOString().slice(0,10);
                const dNext = new Date(d0.getTime() + 24*60*60*1000).toISOString().slice(0,10);
@@ -98,18 +94,18 @@
       </div>
     </section>
 
-    <!-- Duty status quick log -->
+    <!-- Quick Log -->
     <section class="row">
       <div class="card wide">
         <div class="card-title">Quick Log (stamps current <em>game time</em>)</div>
         <div class="status-buttons">
-          <!-- Buttons post /api/event with chosen status -->
-          <button class="status off" data-status="OFF">Off Duty</button>
-          <button class="status sb"  data-status="SB">Sleeper</button>
-          <button class="status d"   data-status="D">Driving</button>
-          <button class="status on"  data-status="ON">On Duty</button>
-          <button class="status ym"  data-status="YM">Yard Move</button>
-          <button class="status pc"  data-status="PC">Personal Conveyance</button>
+          <!-- Highlight the current day's status (if known) with .active -->
+          <button class="status off <%= currentStatus==='OFF' ? 'active' : '' %>" data-status="OFF">Off Duty</button>
+          <button class="status sb  <%= currentStatus==='SB'  ? 'active' : '' %>" data-status="SB">Sleeper</button>
+          <button class="status d   <%= currentStatus==='D'   ? 'active' : '' %>" data-status="D">Driving</button>
+          <button class="status on  <%= currentStatus==='ON'  ? 'active' : '' %>" data-status="ON">On Duty</button>
+          <button class="status ym  <%= currentStatus==='YM'  ? 'active' : '' %>" data-status="YM">Yard Move</button>
+          <button class="status pc  <%= currentStatus==='PC'  ? 'active' : '' %>" data-status="PC">Personal Conveyance</button>
         </div>
         <div class="note-row">
           <input id="note" type="text" placeholder="Optional note (shipper, fuel, inspection, etc.)">
@@ -118,31 +114,65 @@
       </div>
     </section>
 
-    <!-- HOS-like 24h graph -->
+    <!-- DOT-style Daily Grid -->
     <section class="row">
       <div class="card wide">
         <div class="card-title">Daily Grid (Game Date)</div>
+
         <% if (gameDate) { %>
-          <div class="grid">
-            <!-- Y-axis labels (OFF, SB, D, ON). YM/PC are flags but we render them on ON row for simplicity -->
+          <% 
+            // Helpers inside template for minute → "H:MM"
+            const fmt = (m) => {
+              const h = Math.floor(m/60);
+              const mm = String(m % 60).padStart(2,'0');
+              return `${h}:${mm}`;
+            };
+
+            // Row totals (OFF, SB, D, ON). YM/PC rolled into ON, but also available as durations.YM/PC
+            const dOFF = durations.OFF || 0;
+            const dSB  = durations.SB  || 0;
+            const dD   = durations.D   || 0;
+            const dON  = durations.ON  || 0;
+          %>
+
+          <div class="grid" 
+               style="--graph-height:160px; --y-off:20px; --y-sb:60px; --y-d:100px; --y-on:140px; --label-nudge:20px;">
+            <!-- Y-axis labels -->
             <div class="grid-y">
               <div>OFF</div>
               <div>SB</div>
               <div>D</div>
               <div>ON</div>
             </div>
-            <!-- 24 hour vertical ticks -->
+
+            <!-- X-axis hour labels -->
             <div class="grid-x">
               <% for (let h=0; h<25; h++) { %>
                 <div class="tick"><%= h %></div>
               <% } %>
             </div>
-            <!-- Segments bar layer -->
+
+            <!-- Grid lines (vertical hour lines + horizontal row lines) -->
+            <div class="grid-lines">
+              <!-- 25 vertical lines at each hour mark (0..24) -->
+              <% for (let h=0; h<25; h++) { 
+                   const leftPct = (h/24)*100;
+              %>
+                <div class="vline" style="left:<%= leftPct %>%"></div>
+              <% } %>
+              <!-- 4 horizontal lines for OFF/SB/D/ON rows -->
+              <div class="hline" style="top:var(--y-off)"></div>
+              <div class="hline" style="top:var(--y-sb)"></div>
+              <div class="hline" style="top:var(--y-d)"></div>
+              <div class="hline" style="top:var(--y-on)"></div>
+            </div>
+
+            <!-- Bars layer -->
             <div class="grid-bars">
               <% 
-                // Map status -> Y row (OFF=0, SB=1, D=2, ON=3). YM/PC piggyback onto ON row visually.
+                // Map status -> Y row (OFF=0, SB=1, D=2, ON=3). YM/PC render on ON row.
                 const rowOf = s => (s === "OFF" ? 0 : s === "SB" ? 1 : s === "D" ? 2 : 3);
-                // Convert a time ISO to minutes since midnight of gameDate
+                // Convert ISO → minutes since midnight
                 const D0 = new Date(gameDate + "T00:00:00Z").getTime();
                 function minSinceMid(iso) {
                   const t = new Date(iso).getTime();
@@ -164,6 +194,23 @@
                 </div>
               <% }); %>
             </div>
+
+            <!-- Right-side durations aligned to rows -->
+            <div class="grid-durations">
+              <div class="dur off" style="top:var(--y-off)"><%= fmt(dOFF) %></div>
+              <div class="dur sb"  style="top:var(--y-sb)"><%= fmt(dSB) %></div>
+              <div class="dur d"   style="top:var(--y-d)"><%= fmt(dD) %></div>
+              <div class="dur on"  style="top:var(--y-on)">
+                <%= fmt(dON) %>
+                <% if ((durations.YM||0) > 0 || (durations.PC||0) > 0) { %>
+                  <!-- Optional YM/PC detail in smaller text -->
+                  <span class="dur-sub">
+                    <% if ((durations.YM||0) > 0) { %> YM <%= fmt(durations.YM) %> <% } %>
+                    <% if ((durations.PC||0) > 0) { %> PC <%= fmt(durations.PC) %> <% } %>
+                  </span>
+                <% } %>
+              </div>
+            </div>
           </div>
         <% } else { %>
           <div class="muted">Start your game / telemetry to view a day.</div>
@@ -171,7 +218,7 @@
       </div>
     </section>
 
-    <!-- Event list (for the shown game date) -->
+    <!-- Event list -->
     <section class="row">
       <div class="card wide">
         <div class="card-title">Events on <%= gameDate || "?" %></div>
@@ -209,6 +256,6 @@
   </footer>
 
   <!-- Front-end JS -->
-  <script src="/public/main.js"></script><!-- Handles button posts + telemetry polling -->
+  <script src="/public/main.js"></script>
 </body>
 </html>

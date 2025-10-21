@@ -1,4 +1,4 @@
-/* public/styles.css — Dark glassy theme with DOT-style grid */
+/* public/styles.css — Dark glassy theme with DOT-style grid and readable buttons */
 
 /* Reset-ish */
 * { box-sizing: border-box; }
@@ -39,14 +39,29 @@ body { background: #0f0f12; color: #e9e9ef; font-family: system-ui, Segoe UI, Ro
 
 /* Buttons */
 .btn {
-  background: #1b1b22; color: #e9e9ef; border: 1px solid rgba(255,255,255,0.14);
+  background: #1b1b22; color: #ffffff; border: 1px solid rgba(255,255,255,0.2);
   padding: 8px 12px; border-radius: 10px; cursor: pointer; text-decoration: none;
+  font-weight: 600;
 }
-.btn:hover { background: #25252f; }
+.btn:hover { background: #242431; }
 
+/* Status buttons — force readable contrast (white on dark) */
 .status-buttons { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
-.status { border: 1px solid rgba(255,255,255,0.2); background: #121217; padding: 8px 12px; border-radius: 10px; cursor: pointer; }
-.status:hover { background: #1a1a22; }
+.status {
+  border: 1px solid rgba(255,255,255,0.35); 
+  background: #16161f;               /* dark background */
+  color: #ffffff !important;          /* ensure readable text */
+  padding: 10px 14px; 
+  border-radius: 10px; 
+  cursor: pointer; 
+  font-weight: 700;                    /* stronger text */
+  letter-spacing: .2px;
+}
+.status:hover { background: #1e1e2a; }
+.status:disabled { opacity: 0.6; cursor: not-allowed; }
+.status.active { outline: 3px solid #ffffff; } /* highlight current status */
+
+/* Subtle borders by type (kept) */
 .status.off { border-color: #66c2ff; }
 .status.sb  { border-color: #a68cff; }
 .status.d   { border-color: #66ff99; }
@@ -60,18 +75,27 @@ body { background: #0f0f12; color: #e9e9ef; font-family: system-ui, Segoe UI, Ro
 /* Day nav */
 .day-nav { margin-top: 8px; display: flex; gap: 8px; }
 
-/* Grid (HOS-like) */
+/* === DOT-style Grid ===
+   We reserve left for Y labels and right for durations. */
 .grid {
   position: relative;
   background: #0c0c10;
   border: 1px solid rgba(255,255,255,0.12);
   border-radius: 10px;
-  padding: 32px 12px 24px 80px; /* left space for Y labels */
-  height: 180px; /* overall grid height */
+  padding: 32px 120px 28px 80px;  /* left labels + right durations */
+  height: calc(var(--graph-height) + 48px); /* graph height + top/bottom padding */
   overflow: hidden;
+
+  /* default variable fallbacks (overridden inline by style attr) */
+  --graph-height: 160px;
+  --y-off: 20px;
+  --y-sb: 60px;
+  --y-d: 100px;
+  --y-on: 140px;
+  --label-nudge: 20px;
 }
 
-/* Y-axis rows (OFF, SB, D, ON) */
+/* Y-axis labels */
 .grid-y {
   position: absolute; left: 8px; top: 24px; bottom: 24px;
   display: grid; grid-template-rows: repeat(4, 1fr); gap: 0;
@@ -79,35 +103,53 @@ body { background: #0f0f12; color: #e9e9ef; font-family: system-ui, Segoe UI, Ro
 }
 .grid-y > div {
   display: flex; align-items: center; justify-content: flex-start;
-  color: #d8d8e6; font-weight: 600; opacity: 0.9;
+  color: #d8d8e6; font-weight: 700; opacity: 0.95;
 }
 
-/* X-axis 0..24 */
+/* X-axis hour labels (0..24) at bottom */
 .grid-x {
-  position: absolute; left: 80px; right: 12px; bottom: 4px; height: 18px;
+  position: absolute; left: 80px; right: 120px; bottom: 4px; height: 18px;
   display: grid; grid-template-columns: repeat(24, 1fr); gap: 0;
   font-size: 12px; color: #a0a0ad;
 }
 .grid-x .tick { text-align: center; }
 
+/* Grid lines layer */
+.grid-lines {
+  position: absolute; left: 80px; right: 120px; top: 24px; bottom: 24px;
+}
+/* Vertical hour lines */
+.grid-lines .vline {
+  position: absolute; top: 0; bottom: 0; width: 1px;
+  background: rgba(255,255,255,0.12);
+}
+/* Horizontal lines for rows */
+.grid-lines .hline {
+  position: absolute; left: 0; right: 0; height: 1px;
+  background: rgba(255,255,255,0.18);
+}
+
 /* Bars layer */
 .grid-bars {
-  position: absolute; left: 80px; right: 12px; top: 24px; bottom: 24px;
+  position: absolute; left: 80px; right: 120px; top: 24px; bottom: 24px;
 }
 
-/* Individual bar segment */
+/* Each bar sits centered vertically in its row (approx 28px high) */
 .bar {
-  position: absolute; height: calc(25% - 8px);
-  margin-top: 4px; margin-bottom: 4px;
-  border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  position: absolute; 
+  height: 28px;
+  margin-top: -14px; /* center the bar on the row line y */
+  border-radius: 8px; 
+  display: flex; align-items: center; justify-content: center;
   font-size: 11px; letter-spacing: 0.25px; opacity: 0.95;
+  /* left + width are set inline by style attr */
 }
 
-/* Row positions: 0..3 map to OFF, SB, D, ON */
-.row-0 { top: 24px; }
-.row-1 { top: calc(24px + 25%); }
-.row-2 { top: calc(24px + 50%); }
-.row-3 { top: calc(24px + 75%); }
+/* Row anchors: we align tops using the y variables */
+.row-0 { top: var(--y-off); }
+.row-1 { top: var(--y-sb);  }
+.row-2 { top: var(--y-d);   }
+.row-3 { top: var(--y-on);  }
 
 /* Colors by status */
 .bar.off { background: rgba(102,194,255,0.25); border: 1px solid rgba(102,194,255,0.6); }
@@ -119,15 +161,25 @@ body { background: #0f0f12; color: #e9e9ef; font-family: system-ui, Segoe UI, Ro
 
 .bar-label { padding: 2px 6px; }
 
+/* Right-side durations aligned with each row */
+.grid-durations {
+  position: absolute; right: 12px; top: 24px; bottom: 24px; width: 96px;
+  color: #e9e9ef;
+}
+.grid-durations .dur {
+  position: absolute; right: 0;
+  transform: translateY(-14px); /* center with bar */
+  text-align: right; 
+  font-weight: 700;
+}
+.grid-durations .dur-sub {
+  display: block; font-size: 11px; color: #cfcfe6; font-weight: 600;
+}
+
 /* Table */
 table.events { width: 100%; border-collapse: collapse; }
 table.events th, table.events td { padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.1); }
 table.events th { text-align: left; color: #ff6ec7; }
-
-/* Forms */
-.form { display: grid; gap: 10px; }
-.form label { display: grid; gap: 6px; }
-.form input, .form select { padding: 8px 10px; background: #0f0f14; color: #e9e9ef; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; }
 
 /* Footer */
 .footer { text-align: center; padding: 18px; color: #a0a0ad; }
