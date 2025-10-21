@@ -1,37 +1,42 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"><!-- Encoding -->
-  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Responsive -->
-  <title>Settings — DOT Logbook</title><!-- Title -->
-  <link rel="stylesheet" href="/public/styles.css"><!-- Dark theme CSS -->
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Settings — DOT Logbook</title>
+  <link rel="stylesheet" href="/public/styles.css">
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">DOT Logbook — Settings</div><!-- App name -->
-    <nav class="nav">
-      <a href="/">Back to Log</a><!-- Back link -->
-    </nav>
+    <div class="brand">Settings</div>
+    <nav class="nav"><a href="/">Back to Log</a></nav>
   </header>
 
   <main class="container">
     <section class="row">
       <div class="card wide">
         <div class="card-title">Telemetry</div>
-        <form action="/settings" method="post" class="form">
+        <form method="POST" action="/settings" class="form-grid">
           <label>
-            <span>Telemetry URL</span>
-            <!-- Example: http://localhost:25555/api/ets2/telemetry -->
-            <input type="text" name="telemetry_url" value="<%= settings.telemetry_url %>" required>
+            <span>Telemetry API URL</span>
+            <input type="text" name="telemetry_url" value="<%= settings.telemetry_url %>" placeholder="http://localhost:25555/api/ets2/telemetry">
+          </label>
+          <label>
+            <span>Driver Display Name</span>
+            <input type="text" name="driver_name" value="<%= settings.driver_name %>" placeholder="Driver Name">
           </label>
 
-          <div class="muted">
-            This is the ETS2/ATS Telemetry Web Server endpoint. We only read <code>game.time</code> and related
-            fields from here to ensure everything is in <strong>Game Time</strong>.
-          </div>
+          <label>
+            <span>Active Driver</span>
+            <select name="activeDriverId">
+              <% drivers.drivers.forEach(d => { %>
+                <option value="<%= d.id %>" <%= d.id===drivers.activeDriverId ? 'selected' : '' %>><%= d.name %></option>
+              <% }) %>
+            </select>
+          </label>
 
           <div class="form-actions">
-            <button class="btn" type="submit">Save</button>
+            <button class="btn" type="submit">Save Settings</button>
           </div>
         </form>
       </div>
@@ -39,42 +44,16 @@
 
     <section class="row">
       <div class="card wide">
-        <div class="card-title">Driver</div>
-        <form action="/settings" method="post" class="form">
-          <label>
-            <span>Driver Name (display)</span>
-            <input type="text" name="driver_name" value="<%= settings.driver_name %>" required>
-          </label>
-
-          <label>
-            <span>Active Driver</span>
-            <select name="activeDriverId">
-              <% drivers.drivers.forEach(d => { %>
-                <option value="<%= d.id %>" <%= d.id === drivers.activeDriverId ? "selected" : "" %>><%= d.name %></option>
-              <% }) %>
-            </select>
-          </label>
-
-          <div class="form-actions">
-            <button class="btn" type="submit">Save</button>
-          </div>
+        <div class="card-title">Drivers</div>
+        <form method="POST" action="/settings/add-driver" class="form-inline">
+          <input type="text" name="newDriverName" placeholder="New driver name">
+          <button class="btn" type="submit">Add & Switch</button>
         </form>
-
-        <form action="/settings/add-driver" method="post" class="form">
-          <label>
-            <span>Add New Driver</span>
-            <input type="text" name="newDriverName" placeholder="New driver name...">
-          </label>
-          <div class="form-actions">
-            <button class="btn" type="submit">Add Driver</button>
-          </div>
-        </form>
+        <div class="muted" style="margin-top:8px;">Tip: active driver sets who new duty events belong to.</div>
       </div>
     </section>
   </main>
 
-  <footer class="footer">
-    <div>Settings saved locally in JSON files under <code>/data</code>.</div>
-  </footer>
+  <footer class="footer"><div>Game Time only. Telemetry-driven.</div></footer>
 </body>
 </html>

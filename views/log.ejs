@@ -1,24 +1,21 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <!-- Basic meta + title -->
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>DOT Logbook (Game Time)</title>
-
-  <!-- Styles -->
   <link rel="stylesheet" href="/public/styles.css">
 </head>
 <body>
-  <!-- Header -->
   <header class="topbar">
     <div class="brand">DOT Logbook — Game Time</div>
-    <nav class="nav">
-      <a href="/settings">Settings</a>
-    </nav>
+    <nav class="nav"><a href="/settings">Settings</a></nav>
   </header>
 
-  <!-- Main -->
+  <!-- Centered alerts -->
+  <div id="conn-alert" class="center-alert hidden">⚠️ Not connected to game (telemetry unreachable or game closed).</div>
+  <div id="paused-alert" class="center-alert hidden">⏸ Game is paused.</div>
+
   <main class="container">
     <!-- Summary cards -->
     <section class="row">
@@ -29,20 +26,20 @@
 
       <div class="card">
         <div class="card-title">Telemetry</div>
-        <% if (telem && telem.game) { %>
-          <div class="card-kv"><span>Connected:</span><span><%= String(telem.game.connected) %></span></div>
-          <div class="card-kv"><span>Game:</span><span><%= telem.game.gameName || "N/A" %></span></div>
-          <div class="card-kv"><span>Paused:</span><span><%= String(telem.game.paused) %></span></div>
-          <div class="card-kv"><span>Time Scale:</span><span><%= telem.game.timeScale ?? "?" %></span></div>
-        <% } else { %>
-          <div class="card-value warn">No telemetry data yet.</div>
-        <% } %>
+        <div class="card-kv"><span>Connected:</span><span id="telemetry-connected" class="kv-value"><%= (telem && telem.game && telem.game.connected) ? "Yes" : "No" %></span></div>
+        <div class="card-kv"><span>Game:</span><span id="telemetry-game"><%= telem && telem.game && telem.game.gameName ? telem.game.gameName : "—" %></span></div>
+        <div class="card-kv"><span>Paused:</span>
+          <span id="telemetry-paused">
+            <%= (telem && telem.game && typeof telem.game.paused === "boolean") ? (telem.game.paused ? "Yes" : "No") : "—" %>
+          </span>
+        </div>
+        <div class="card-kv"><span>Time Scale:</span><span id="telemetry-timescale"><%= telem && telem.game && (telem.game.timeScale ?? null) !== null ? telem.game.timeScale : "—" %></span></div>
       </div>
 
       <div class="card">
         <div class="card-title">Game Time</div>
-        <% 
-          // Helper: ISO ("0001-01-08T21:09:00Z") → "h:mm AM/PM"
+        <%
+          // ISO → "h:mm AM/PM"
           function fmt12(iso) {
             if (!iso || iso.length < 16) return "—";
             const hh = Number(iso.slice(11,13));
@@ -51,33 +48,25 @@
             const h12 = ((hh % 12) || 12);
             return `${h12}:${mm} ${ampm}`;
           }
+          const gt = telem && telem.game ? telem.game.time : null;
+          const dateStr = gt ? gt.slice(0,10) : "—";
         %>
-        <% if (telem && telem.game && telem.game.time) { 
-             const gt = telem.game.time;
-             const date = gt.slice(0,10);
-        %>
-          <div id="game-time">
-            <div class="card-kv"><span>Date:</span><span><%= date %></span></div>
-            <div class="card-kv"><span>Time:</span><span><%= fmt12(gt) %></span></div>
-          </div>
-        <% } else { %>
-          <div class="card-value warn">Waiting for game.time…</div>
-        <% } %>
+        <div id="game-time">
+          <div class="card-kv"><span>Date:</span><span id="game-date"><%= dateStr %></span></div>
+          <div class="card-kv"><span>Time:</span><span id="game-time-text"><%= gt ? fmt12(gt) : "—" %></span></div>
+        </div>
       </div>
 
       <div class="card">
         <div class="card-title">Truck</div>
-        <% 
+        <%
           const kmh = telem && telem.truck && typeof telem.truck.speed === "number" ? telem.truck.speed : null;
           const mph = kmh === null ? null : (kmh * 0.621371);
           const odoKm = telem && telem.truck && typeof telem.truck.odometer === "number" ? telem.truck.odometer : null;
           const odoMi = odoKm === null ? null : (odoKm * 0.621371);
         %>
-        <div class="card-kv"><span>Speed:</span><span><%= mph === null ? "N/A" : mph.toFixed(0) + " mph" %></span></div>
-        <div class="card-kv"><span>Odometer:</span><span><%= odoMi === null ? "N/A" : odoMi.toFixed(0) + " mi" %></span></div>
-        <% if (telem && telem.navigation) { %>
-          <div class="card-kv"><span>Speed Limit:</span><span><%= telem.navigation.speedLimit ?? "?" %> km/h</span></div>
-        <% } %>
+        <div class="card-kv"><span>Speed:</span><span id="truck-speed"><%= mph === null ? "—" : mph.toFixed(0) + " mph" %></span></div>
+        <div class="card-kv"><span>Odometer:</span><span id="truck-odo"><%= odoMi === null ? "—" : odoMi.toFixed(0) + " mi" %></span></div>
       </div>
     </section>
 
@@ -109,7 +98,6 @@
       <div class="card wide">
         <div class="card-title">Quick Log (stamps current <em>game time</em>)</div>
         <div class="status-buttons">
-          <!-- Active highlight indicates the last segment status for this day's view -->
           <button class="status off <%= currentStatus==='OFF' ? 'active' : '' %>" data-status="OFF">Off Duty</button>
           <button class="status sb  <%= currentStatus==='SB'  ? 'active' : '' %>" data-status="SB">Sleeper</button>
           <button class="status d   <%= currentStatus==='D'   ? 'active' : '' %>" data-status="D">Driving</button>
@@ -124,58 +112,32 @@
       </div>
     </section>
 
-    <!-- DOT-style Daily Grid -->
+    <!-- DOT-style Daily Grid (AM/PM axis; PC on OFF row; YM on ON row; future trimmed) -->
     <section class="row">
       <div class="card wide">
         <div class="card-title">Daily Grid (Game Date)</div>
 
         <% if (gameDate) { %>
           <% 
-            // Format minutes → "H:MM"
-            const fmtDur = (m) => {
-              const h = Math.floor(m/60);
-              const mm = String(m % 60).padStart(2,'0');
-              return `${h}:${mm}`;
-            };
-
-            // Row totals (OFF, SB, D, ON). OFF now includes PC; ON includes YM.
-            const dOFF = durations.OFF || 0;
-            const dSB  = durations.SB  || 0;
-            const dD   = durations.D   || 0;
-            const dON  = durations.ON  || 0;
-
-            // Hour tick label helper: 0..24 → "12 AM" .. "12 AM"
-            function hourLabel12(h) {
-              const am = h < 12 || h === 24;                  // 0..11, 24 → AM
-              const raw = h % 12;                             // 0..11
-              const h12 = raw === 0 ? 12 : raw;               // 0 → 12
-              const suffix = am ? "AM" : "PM";
-              return `${h12} ${suffix}`;
-            }
+            const fmtDur = (m)=>{ const h=Math.floor(m/60); const mm=String(m%60).padStart(2,'0'); return `${h}:${mm}`; };
+            const dOFF = durations.OFF||0, dSB = durations.SB||0, dD = durations.D||0, dON = durations.ON||0;
+            function hourLabel12(h){ const am=(h<12||h===24); const raw=h%12; const h12=raw===0?12:raw; return `${h12} ${am?'AM':'PM'}`; }
           %>
 
-          <div class="grid" 
-               style="--graph-height:160px; --y-off:20px; --y-sb:60px; --y-d:100px; --y-on:140px; --label-nudge:20px;">
+          <div class="grid" style="--graph-height:160px; --y-off:20px; --y-sb:60px; --y-d:100px; --y-on:140px; --label-nudge:20px;">
             <!-- Y-axis labels -->
-            <div class="grid-y">
-              <div>OFF</div>
-              <div>SB</div>
-              <div>D</div>
-              <div>ON</div>
-            </div>
+            <div class="grid-y"><div>OFF</div><div>SB</div><div>D</div><div>ON</div></div>
 
-            <!-- X-axis hour labels in AM/PM -->
+            <!-- X-axis labels in AM/PM -->
             <div class="grid-x">
               <% for (let h=0; h<25; h++) { %>
                 <div class="tick"><%= hourLabel12(h) %></div>
               <% } %>
             </div>
 
-            <!-- Grid lines (vertical hour marks + horizontal row lines) -->
+            <!-- Grid lines -->
             <div class="grid-lines">
-              <% for (let h=0; h<25; h++) { 
-                   const leftPct = (h/24)*100;
-              %>
+              <% for (let h=0; h<25; h++){ const leftPct=(h/24)*100; %>
                 <div class="vline" style="left:<%= leftPct %>%"></div>
               <% } %>
               <div class="hline" style="top:var(--y-off)"></div>
@@ -184,50 +146,35 @@
               <div class="hline" style="top:var(--y-on)"></div>
             </div>
 
-            <!-- Bars layer (segments already trimmed at "now" if today) -->
+            <!-- Bars -->
             <div class="grid-bars">
-              <% 
-                // Map status → row: OFF=0, SB=1, D=2, ON=3
-                // YM stays on ON row; PC must render on OFF row.
-                const rowOf = s => (s === "OFF" ? 0 : s === "SB" ? 1 : s === "D" ? 2 : (s === "PC" ? 0 : 3));
-                // Convert ISO → minutes since midnight for positioning
+              <%
+                // PC renders on OFF row; YM on ON row
+                const rowOf = s => (s==="OFF" ? 0 : s==="SB" ? 1 : s==="D" ? 2 : (s==="PC" ? 0 : 3));
                 const D0 = new Date(gameDate + "T00:00:00Z").getTime();
-                function minSinceMid(iso) {
-                  const t = new Date(iso).getTime();
-                  const diff = Math.max(0, Math.min(24*60, Math.floor((t - D0)/60000)));
-                  return diff;
-                }
+                function minSinceMid(iso){ const t=new Date(iso).getTime(); return Math.max(0, Math.min(1440, Math.floor((t-D0)/60000))); }
               %>
-              <% segments.forEach(seg => { 
-                   const m0 = minSinceMid(seg.startIso);
-                   const m1 = minSinceMid(seg.endIso);
-                   const mins = Math.max(0, m1 - m0);
-                   const leftPct = (m0 / (24*60)) * 100;
-                   const widthPct = (mins / (24*60)) * 100;
-                   const row = rowOf(seg.status);
+              <% segments.forEach(seg=>{ 
+                   const m0=minSinceMid(seg.startIso), m1=minSinceMid(seg.endIso), mins=Math.max(0,m1-m0);
+                   const leftPct=(m0/1440)*100, widthPct=(mins/1440)*100, row=rowOf(seg.status);
               %>
-                <div class="bar row-<%= row %> <%= seg.status.toLowerCase() %>" 
-                     style="left:<%= leftPct %>%; width:<%= widthPct %>%;">
+                <div class="bar row-<%= row %> <%= seg.status.toLowerCase() %>" style="left:<%= leftPct %>%; width:<%= widthPct %>%;">
                   <span class="bar-label"><%= seg.status %></span>
                 </div>
               <% }); %>
             </div>
 
-            <!-- Right-side durations aligned to rows -->
+            <!-- Right-side durations -->
             <div class="grid-durations">
               <div class="dur off" style="top:var(--y-off)">
                 <%= fmtDur(dOFF) %>
-                <% if ((durations.PC||0) > 0) { %>
-                  <span class="dur-sub">PC <%= fmtDur(durations.PC) %></span>
-                <% } %>
+                <% if ((durations.PC||0)>0){ %><span class="dur-sub">PC <%= fmtDur(durations.PC) %></span><% } %>
               </div>
               <div class="dur sb"  style="top:var(--y-sb)"><%= fmtDur(dSB) %></div>
               <div class="dur d"   style="top:var(--y-d)"><%= fmtDur(dD) %></div>
               <div class="dur on"  style="top:var(--y-on)">
                 <%= fmtDur(dON) %>
-                <% if ((durations.YM||0) > 0) { %>
-                  <span class="dur-sub">YM <%= fmtDur(durations.YM) %></span>
-                <% } %>
+                <% if ((durations.YM||0)>0){ %><span class="dur-sub">YM <%= fmtDur(durations.YM) %></span><% } %>
               </div>
             </div>
           </div>
@@ -237,7 +184,7 @@
       </div>
     </section>
 
-    <!-- Event list (kept 24h time for precision; can switch to AM/PM on request) -->
+    <!-- Event list (24h times kept for precision; can switch to AM/PM on request) -->
     <section class="row">
       <div class="card wide">
         <div class="card-title">Events on <%= gameDate || "?" %></div>
@@ -245,23 +192,14 @@
           <div class="muted">No events for this date yet.</div>
         <% } else { %>
           <table class="events">
-            <thead>
-              <tr>
-                <th>Time</th><th>Status</th><th>Odometer</th><th>Note</th>
-              </tr>
-            </thead>
+            <thead><tr><th>Time</th><th>Status</th><th>Odometer</th><th>Note</th></tr></thead>
             <tbody>
               <% events.forEach(ev => { 
-                   const t = ev.gameTimeIso.slice(11,16); // 24h display; say the word if you want AM/PM here too
-                   const odo = (typeof ev.odometerMi === "number") ? `${ev.odometerMi.toFixed(0)} mi` : "—";
+                   const t=ev.gameTimeIso.slice(11,16); 
+                   const odo=(typeof ev.odometerMi==="number") ? `${ev.odometerMi.toFixed(0)} mi` : "—"; 
               %>
-                <tr>
-                  <td><%= t %></td>
-                  <td><%= ev.status %></td>
-                  <td><%= odo %></td>
-                  <td><%= ev.note || "" %></td>
-                </tr>
-              <% }); %>
+                <tr><td><%= t %></td><td><%= ev.status %></td><td><%= odo %></td><td><%= ev.note || "" %></td></tr>
+              <% }) %>
             </tbody>
           </table>
         <% } %>
@@ -269,12 +207,7 @@
     </section>
   </main>
 
-  <!-- Footer -->
-  <footer class="footer">
-    <div>Game Time only. Telemetry-driven. No IRL time or clocks are used.</div>
-  </footer>
-
-  <!-- Front-end JS -->
+  <footer class="footer"><div>Game Time only. Telemetry-driven. No IRL time or clocks are used.</div></footer>
   <script src="/public/main.js"></script>
 </body>
 </html>

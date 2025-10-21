@@ -1,6 +1,5 @@
-// public/main.js — UI logic for posting duty events and polling telemetry
+// public/main.js — UI logic for posting duty events and live connection/paused status
 
-// Utility: POST JSON and parse response
 async function postJson(url, body) {
     const res = await fetch(url, {
         method: "POST",
@@ -10,27 +9,21 @@ async function postJson(url, body) {
     return res.json();
 }
 
-// When a status button is clicked, send /api/event with chosen status
 document.querySelectorAll(".status-buttons .status")?.forEach(btn => {
     btn.addEventListener("click", async () => {
         const status = btn.getAttribute("data-status");
-        const noteEl = document.getElementById("note");
-        const note = noteEl ? noteEl.value.trim() : "";
-
-        // Disable buttons to avoid double submits
+        const note = (document.getElementById("note")?.value || "").trim();
         document.querySelectorAll(".status-buttons .status").forEach(b => b.disabled = true);
-
         try {
             const result = await postJson("/api/event", { status, note });
             const out = document.getElementById("post-result");
             if (result.ok) {
-                out.textContent = `Saved ${status} at game time ${result.event.gameTimeIso.slice(11, 16)} (odometer: ${typeof result.event.odometerMi === "number" ? result.event.odometerMi.toFixed(0) + " mi" : "—"
-                    }). Refreshing…`;
+                out.textContent = `Saved ${status} at game time ${result.event.gameTimeIso.slice(11, 16)}. Refreshing…`;
                 window.location.reload();
             } else {
                 out.textContent = "Error: " + (result.error || "Unknown error");
             }
-        } catch (e) {
+        } catch {
             const out = document.getElementById("post-result");
             if (out) out.textContent = "Network error posting event.";
         } finally {
@@ -39,41 +32,74 @@ document.querySelectorAll(".status-buttons .status")?.forEach(btn => {
     });
 });
 
-// Helper: format ISO "0001-01-08T21:09:00Z" → "h:mm AM/PM"
+// ISO → "h:mm AM/PM"
 function fmt12(iso) {
-    try {
-        if (!iso || iso.length < 16) return "—";
-        const hh = Number(iso.slice(11, 13));
-        const mm = iso.slice(14, 16);
-        const ampm = hh >= 12 ? "PM" : "AM";
-        const h12 = ((hh % 12) || 12);
-        return `${h12}:${mm} ${ampm}`;
-    } catch {
-        return "—";
-    }
+    if (!iso || iso.length < 16) return "—";
+    const hh = Number(iso.slice(11, 13));
+    const mm = iso.slice(14, 16);
+    const ampm = hh >= 12 ? "PM" : "AM";
+    const h12 = ((hh % 12) || 12);
+    return `${h12}:${mm} ${ampm}`;
 }
 
-// Optional: light telemetry polling to keep the Game Time card fresh
-// NOTE: We DO NOT extrapolate IRL time; we simply re-read telemetry.game.time.
+function setConnectionUI(connected, paused, payload) {
+    const connEl = document.getElementById("telemetry-connected");
+    const alertConn = document.getElementById("conn-alert");
+    const alertPaused = document.getElementById("paused-alert");
+
+    const gameEl = document.getElementById("telemetry-game");
+    const pausedEl = document.getElementById("telemetry-paused");
+    const scaleEl = document.getElementById("telemetry-timescale");
+    const dateEl = document.getElementById("game-date");
+    const timeEl = document.getElementById("game-time-text");
+
+    // Connected label
+    if (connEl) {
+        connEl.textContent = connected ? "Yes" : "No";
+        connEl.classList.toggle("kv-value-ok", connected);
+        connEl.classList.toggle("kv-value-bad", !connected);
+    }
+
+    // Center alerts
+    if (!connected) {
+        if (alertConn) alertConn.classList.remove("hidden");
+        if (alertPaused) alertPaused.classList.add("hidden"); // paused state unknown when disconnected
+        // Blank info
+        if (gameEl) gameEl.textContent = "—";
+        if (pausedEl) pausedEl.textContent = "—";
+        if (scaleEl) scaleEl.textContent = "—";
+        if (dateEl) dateEl.textContent = "—";
+        if (timeEl) timeEl.textContent = "—";
+        return;
+    } else {
+        if (alertConn) alertConn.classList.add("hidden");
+    }
+
+    // Connected: show/hide paused alert & fill fields
+    const t = payload?.game?.time || null;
+    const pausedBool = (typeof paused === "boolean") ? paused : (typeof payload?.game?.paused === "boolean" ? payload.game.paused : null);
+
+    if (alertPaused) {
+        if (pausedBool === true) alertPaused.classList.remove("hidden");
+        else alertPaused.classList.add("hidden");
+    }
+
+    if (gameEl) gameEl.textContent = payload?.game?.gameName ?? "—";
+    if (pausedEl) pausedEl.textContent = (pausedBool === null) ? "—" : (pausedBool ? "Yes" : "No");
+    if (scaleEl) scaleEl.textContent = (payload?.game?.timeScale ?? "—");
+    if (dateEl) dateEl.textContent = t ? t.slice(0, 10) : "—";
+    if (timeEl) timeEl.textContent = t ? fmt12(t) : "—";
+}
+
+// Poll the live endpoint every 1s
 async function pollTelemetry() {
     try {
-        const res = await fetch("/api/telemetry");
+        const res = await fetch("/api/telemetry", { cache: "no-store" });
         const json = await res.json();
-        if (json && json.ok && json.telemetry && json.telemetry.game && json.telemetry.game.time) {
-            const iso = json.telemetry.game.time;      // Absolute game time (ISO)
-            const date = iso.slice(0, 10);             // YYYY-MM-DD
-            const wrap = document.getElementById("game-time");
-            if (wrap) {
-                wrap.innerHTML = `
-          <div class="card-kv"><span>Date:</span><span>${date}</span></div>
-          <div class="card-kv"><span>Time:</span><span>${fmt12(iso)}</span></div>
-        `;
-            }
-        }
+        setConnectionUI(Boolean(json?.connected), json?.paused ?? null, json?.telemetry || null);
     } catch {
-        // ignore — page still works on last known data
+        setConnectionUI(false, null, null);
     }
 }
-
-// Poll every 2 seconds (lightweight, and only reading telemetry)
-setInterval(pollTelemetry, 2000);
+setInterval(pollTelemetry, 1000);
+pollTelemetry();
