@@ -4,6 +4,14 @@
     {
       "id": "default",
       "name": "Driver Name"
+    },
+    {
+      "id": "bob",
+      "name": "Bob"
+    },
+    {
+      "id": "micahel",
+      "name": "Micahel"
     }
   ]
 }

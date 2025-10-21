@@ -108,6 +108,34 @@ async function fetchTelemetry() {
 }
 async function getTelemetrySafe() { try { return await fetchTelemetry(); } catch { return LAST_TELEMETRY; } }
 
+// Helpers to pick first non-empty string & build "City, State"
+function pick(...cands) {
+    for (const v of cands) {
+        if (typeof v === "string" && v.trim()) return v.trim();
+    }
+    return "";
+}
+function defaultLocationFromTelem(telem) {
+    if (!telem) return "";
+    const nav = telem.navigation || {};
+    const truckPlace = (telem.truck && telem.truck.place) ? telem.truck.place : {};
+    const job = telem.job || {};
+
+    const city = pick(
+        nav.city, nav.cityName, nav.currentCity, nav.destinationCity, nav.nextWaypointCity,
+        truckPlace.city, job.destinationCity, job.sourceCity
+    );
+    const state = pick(
+        nav.state, nav.stateCode, nav.region, nav.province, nav.countryCode,
+        truckPlace.state, truckPlace.stateCode, truckPlace.countryCode
+    );
+
+    if (city && state) return `${city}, ${state}`;
+    if (city) return city;
+    if (state) return state;
+    return "";
+}
+
 // === Routes
 app.get("/", async (req, res) => {
     const telem = await getTelemetrySafe();
@@ -128,7 +156,7 @@ app.get("/log/:date?", async (req, res) => {
     if (!gameDate && telem?.game?.time) gameDate = splitGameIso(telem.game.time).date;
 
     if (!gameDate) {
-        return res.render("log", { settings, drivers, activeDriverId: drivers.activeDriverId, telem, gameDate: null, segments: [], events: [], durations: { OFF: 0, SB: 0, D: 0, ON: 0, YM: 0, PC: 0 }, currentStatus: null });
+        return res.render("log", { settings, drivers, activeDriverId: drivers.activeDriverId, telem, gameDate: null, segments: [], events: [], durations: { OFF: 0, SB: 0, D: 0, ON: 0, YM: 0, PC: 0 }, currentStatus: null, initialLoc: defaultLocationFromTelem(telem) });
     }
 
     const nowIso = telem?.game?.time ?? null;
@@ -150,11 +178,12 @@ app.get("/log/:date?", async (req, res) => {
             .filter(e => e.driverId === drivers.activeDriverId && e.gameTimeIso.startsWith(gameDate))
             .sort((a, b) => cmpGameIso(a.gameTimeIso, b.gameTimeIso)),
         durations,
-        currentStatus
+        currentStatus,
+        initialLoc: defaultLocationFromTelem(telem)
     });
 });
 
-// IMPORTANT: "connected" = telemetry.game.connected (game open), and expose "paused".
+// "connected" = telemetry.game.connected (game open), also expose "paused".
 app.get("/api/telemetry", async (req, res) => {
     try {
         const data = await fetchTelemetry(); // live
@@ -167,7 +196,7 @@ app.get("/api/telemetry", async (req, res) => {
 });
 
 app.post("/api/event", async (req, res) => {
-    const { status, note } = req.body;
+    const { status, activity, location } = req.body; // note: no 'note'
     const drivers = await loadDrivers();
     const events = await loadEvents();
     let telem;
@@ -181,12 +210,15 @@ app.post("/api/event", async (req, res) => {
     const ALLOWED = ["OFF", "SB", "D", "ON", "YM", "PC"];
     if (!ALLOWED.includes(String(status))) return res.status(400).json({ ok: false, error: "Invalid status." });
 
+    const loc = (location && String(location).trim()) ? String(location).trim() : defaultLocationFromTelem(telem);
+
     const ev = {
         driverId: drivers.activeDriverId,
         status: String(status),
         gameTimeIso: telem.game.time,
         odometerMi: (telem.truck && typeof telem.truck.odometer === "number") ? telem.truck.odometer * 0.621371 : null,
-        note: note ? String(note) : ""
+        activity: activity ? String(activity) : "",
+        location: loc
     };
     events.push(ev);
     await saveEvents(events);

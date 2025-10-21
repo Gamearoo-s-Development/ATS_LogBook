@@ -29,6 +29,7 @@ body { background: #0f0f12; color: #e9e9ef; font-family: system-ui, Segoe UI, Ro
   border-radius: 14px;
   padding: 14px;
   box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  position: relative;
 }
 .card.wide { grid-column: span 12; }
 .card-title { font-weight: 700; margin-bottom: 8px; color: #ff6ec7; }
@@ -83,14 +84,57 @@ body { background: #0f0f12; color: #e9e9ef; font-family: system-ui, Segoe UI, Ro
 .status.ym  { border-color: #ff9a66; }
 .status.pc  { border-color: #ff66b3; }
 
-.note-row { margin-top: 10px; }
-.note-row input {
-  width: 100%; padding: 8px 10px; border-radius: 8px;
-  border: 1px solid rgba(255,255,255,0.2); background: #0f0f14; color: #e9e9ef;
+/* Quick Form additions */
+.quick-form {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 10px;
+  margin-top: 12px;
+}
+.qf-item { grid-column: span 6; display: flex; flex-direction: column; gap: 6px; }
+.qf-item.qf-wide { grid-column: span 12; }
+.qf-inline { display: flex; gap: 8px; }
+.qf-inline input { flex: 1; }
+
+/* Smaller Activity select (replaces previous "tall" look) */
+.activity-select {
+  min-height: 36px;
+  padding: 8px 10px;
+  font-size: 14px;
 }
 
+/* Big current status in quick log (spelled out) */
+.quick-log .current-status {
+  position: absolute;
+  top: 12px; right: 14px;
+}
+.status-chip {
+  display: inline-block;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: .4px;
+  background: rgba(255,255,255,0.08);
+  border: 2px solid rgba(255,255,255,0.25);
+}
+.status-chip.off { border-color: #66c2ff; }
+.status-chip.sb  { border-color: #a68cff; }
+.status-chip.d   { border-color: #66ff99; }
+.status-chip.on  { border-color: #ffd966; }
+.status-chip.ym  { border-color: #ff9a66; }
+.status-chip.pc  { border-color: #ff66b3; }
+
 /* Day nav */
-.day-nav { margin-top: 8px; display: flex; gap: 8px; }
+.day-nav { margin-top: 8px; display: flex; gap: 8px; align-items: center; }
+
+/* Calendar input styles (white icon) */
+.date-input {
+  background: #0f0f14; color: #e9e9ef; border: 1px solid rgba(255,255,255,0.2);
+  padding: 8px 10px; border-radius: 8px;
+  color-scheme: dark;
+}
+.date-input::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.9; }
 
 /* DOT-style Grid */
 .grid {
@@ -98,7 +142,7 @@ body { background: #0f0f12; color: #e9e9ef; font-family: system-ui, Segoe UI, Ro
   background: #0c0c10;
   border: 1px solid rgba(255,255,255,0.12);
   border-radius: 10px;
-  padding: 32px 120px 28px 80px;  /* left labels + right durations */
+  padding: 32px 120px 28px 80px;
   height: calc(var(--graph-height) + 48px);
   overflow: hidden;
   --graph-height: 160px;
@@ -178,3 +222,20 @@ table.events th { text-align: left; color: #ff6ec7; }
 
 /* Footer */
 .footer { text-align: center; padding: 18px; color: #a0a0ad; }
+/* White calendar style just for the Day card */
+.day-nav .date-input--white {
+  background: #ffffff;
+  color: #111;
+  border: 1px solid rgba(0,0,0,0.2);
+  border-radius: 8px;
+  color-scheme: light; /* make the calendar popup white */
+}
+
+.day-nav .date-input--white::-webkit-calendar-picker-indicator {
+  filter: none;  /* keep icon dark on white */
+  opacity: 0.85;
+}
+
+.day-nav .date-input--white:hover {
+  border-color: rgba(0,0,0,0.35);
+}

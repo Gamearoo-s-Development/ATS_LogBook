@@ -70,7 +70,7 @@
       </div>
     </section>
 
-    <!-- Day navigation -->
+    <!-- Day navigation + calendar -->
     <section class="row">
       <div class="card wide">
         <div class="card-title">Day</div>
@@ -88,6 +88,7 @@
             <a class="btn" href="/log/<%= dPrev %>">◀ Prev Day</a>
             <a class="btn" href="/">Today (Game)</a>
             <a class="btn" href="/log/<%= dNext %>">Next Day ▶</a>
+            <input id="date-picker" class="date-input" type="date" value="<%= gameDate %>">
           <% } %>
         </div>
       </div>
@@ -95,8 +96,19 @@
 
     <!-- Quick Log -->
     <section class="row">
-      <div class="card wide">
+      <div class="card wide quick-log">
         <div class="card-title">Quick Log (stamps current <em>game time</em>)</div>
+
+        <!-- Big current status (spelled out) -->
+        <%
+          const labelOf = s => ({OFF:"Off Duty", SB:"Sleeper", D:"Driving", ON:"On Duty", YM:"Yard Move", PC:"Personal Conveyance"})[s] || s || "Off Duty";
+        %>
+        <div class="current-status">
+          <span class="status-chip <%= (currentStatus||'OFF').toLowerCase() %>">
+            <%= labelOf(currentStatus || 'OFF') %>
+          </span>
+        </div>
+
         <div class="status-buttons">
           <button class="status off <%= currentStatus==='OFF' ? 'active' : '' %>" data-status="OFF">Off Duty</button>
           <button class="status sb  <%= currentStatus==='SB'  ? 'active' : '' %>" data-status="SB">Sleeper</button>
@@ -105,9 +117,28 @@
           <button class="status ym  <%= currentStatus==='YM'  ? 'active' : '' %>" data-status="YM">Yard Move</button>
           <button class="status pc  <%= currentStatus==='PC'  ? 'active' : '' %>" data-status="PC">Personal Conveyance</button>
         </div>
-        <div class="note-row">
-          <input id="note" type="text" placeholder="Optional note (shipper, fuel, inspection, etc.)">
+
+        <div class="quick-form">
+          <label class="qf-item">
+            <span>Activity</span>
+            <select id="activity" class="activity-select">
+              <option value="">—</option>
+              <option>Fuel</option>
+              <option>Pre/Post Trip</option>
+              <option>Live Load/Unload</option>
+              <option>Scale</option>
+              <option>Breakdown</option>
+              <option>Wash</option>
+              <option>Paperwork</option>
+            </select>
+          </label>
+
+          <label class="qf-item qf-wide">
+            <span>Location (City, State — auto; you can edit)</span>
+            <input id="location" type="text" placeholder="City, State" value="<%= initialLoc || '' %>">
+          </label>
         </div>
+
         <div id="post-result" class="muted"></div>
       </div>
     </section>
@@ -125,17 +156,14 @@
           %>
 
           <div class="grid" style="--graph-height:160px; --y-off:20px; --y-sb:60px; --y-d:100px; --y-on:140px; --label-nudge:20px;">
-            <!-- Y-axis labels -->
             <div class="grid-y"><div>OFF</div><div>SB</div><div>D</div><div>ON</div></div>
 
-            <!-- X-axis labels in AM/PM -->
             <div class="grid-x">
               <% for (let h=0; h<25; h++) { %>
                 <div class="tick"><%= hourLabel12(h) %></div>
               <% } %>
             </div>
 
-            <!-- Grid lines -->
             <div class="grid-lines">
               <% for (let h=0; h<25; h++){ const leftPct=(h/24)*100; %>
                 <div class="vline" style="left:<%= leftPct %>%"></div>
@@ -146,10 +174,8 @@
               <div class="hline" style="top:var(--y-on)"></div>
             </div>
 
-            <!-- Bars -->
             <div class="grid-bars">
               <%
-                // PC renders on OFF row; YM on ON row
                 const rowOf = s => (s==="OFF" ? 0 : s==="SB" ? 1 : s==="D" ? 2 : (s==="PC" ? 0 : 3));
                 const D0 = new Date(gameDate + "T00:00:00Z").getTime();
                 function minSinceMid(iso){ const t=new Date(iso).getTime(); return Math.max(0, Math.min(1440, Math.floor((t-D0)/60000))); }
@@ -164,7 +190,6 @@
               <% }); %>
             </div>
 
-            <!-- Right-side durations -->
             <div class="grid-durations">
               <div class="dur off" style="top:var(--y-off)">
                 <%= fmtDur(dOFF) %>
@@ -184,7 +209,7 @@
       </div>
     </section>
 
-    <!-- Event list (24h times kept for precision; can switch to AM/PM on request) -->
+    <!-- Event list (AM/PM time + Activity + Location) -->
     <section class="row">
       <div class="card wide">
         <div class="card-title">Events on <%= gameDate || "?" %></div>
@@ -192,13 +217,32 @@
           <div class="muted">No events for this date yet.</div>
         <% } else { %>
           <table class="events">
-            <thead><tr><th>Time</th><th>Status</th><th>Odometer</th><th>Note</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Time</th><th>Status</th><th>Activity</th><th>Location</th><th>Odometer</th>
+              </tr>
+            </thead>
             <tbody>
-              <% events.forEach(ev => { 
-                   const t=ev.gameTimeIso.slice(11,16); 
-                   const odo=(typeof ev.odometerMi==="number") ? `${ev.odometerMi.toFixed(0)} mi` : "—"; 
+              <% 
+                const fmt12 = (iso) => {
+                  if (!iso || iso.length < 16) return "—";
+                  const hh = Number(iso.slice(11,13));
+                  const mm = iso.slice(14,16);
+                  const ampm = hh >= 12 ? "PM" : "AM";
+                  const h12 = ((hh % 12) || 12);
+                  return `${h12}:${mm} ${ampm}`;
+                };
+                events.forEach(ev => { 
+                  const t = fmt12(ev.gameTimeIso);
+                  const odo = (typeof ev.odometerMi==="number") ? `${ev.odometerMi.toFixed(0)} mi` : "—";
               %>
-                <tr><td><%= t %></td><td><%= ev.status %></td><td><%= odo %></td><td><%= ev.note || "" %></td></tr>
+                <tr>
+                  <td><%= t %></td>
+                  <td><%= ev.status %></td>
+                  <td><%= ev.activity || "" %></td>
+                  <td><%= ev.location || "" %></td>
+                  <td><%= odo %></td>
+                </tr>
               <% }) %>
             </tbody>
           </table>
